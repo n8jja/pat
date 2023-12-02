@@ -50,6 +50,12 @@ type Conn struct {
 	closed       bool
 }
 
+type GPSdClient interface {
+	Dial(addr string) (GPSdClient, error)
+	Watch(enable bool)
+	Next() (*TPV, error)
+}
+
 // Dial establishes a socket connection to the GPSd daemon.
 func Dial(addr string) (*Conn, error) {
 	tcpConn, err := net.DialTimeout("tcp", addr, 30*time.Second)
