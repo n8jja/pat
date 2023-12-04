@@ -8,7 +8,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/la5nta/pat/internal/maidenhead"
 	"io"
 	"log"
 	"net"
@@ -27,6 +26,7 @@ import (
 	"github.com/la5nta/pat/internal/directories"
 	"github.com/la5nta/pat/internal/forms"
 	"github.com/la5nta/pat/internal/gpsd"
+	"github.com/la5nta/pat/internal/maidenhead"
 
 	"github.com/la5nta/wl2k-go/catalog"
 	"github.com/la5nta/wl2k-go/fbb"
@@ -196,6 +196,7 @@ var fOptions struct {
 	IgnoreBusy bool // Move to connect?
 	SendOnly   bool // Move to connect?
 	RadioOnly  bool
+	UptateGrid bool
 
 	Robust       bool
 	MyCall       string
@@ -215,6 +216,7 @@ func optionsSet() *pflag.FlagSet {
 	set.BoolVarP(&fOptions.SendOnly, "send-only", "s", false, "Download inbound messages later, send only.")
 	set.BoolVarP(&fOptions.RadioOnly, "radio-only", "", false, "Radio Only mode (Winlink Hybrid RMS only).")
 	set.BoolVar(&fOptions.IgnoreBusy, "ignore-busy", false, "Don't wait for clear channel before connecting to a node.")
+	set.BoolVar(&fOptions.UptateGrid, "gridsquare-update", true, "Automatically update the maidenhead grid square from the gpsd daemon.")
 
 	defaultMBox := filepath.Join(directories.DataDir(), "mailbox")
 	defaultFormsPath := filepath.Join(directories.DataDir(), "Standard_Forms")
@@ -265,6 +267,7 @@ func main() {
 	debug.Printf("Config file is\t'%s'", fOptions.ConfigPath)
 	debug.Printf("Log file is \t'%s'", fOptions.LogPath)
 	debug.Printf("Event log file is\t'%s'", fOptions.EventLogPath)
+	debug.Printf("Auto gridsquare update is\t'%s'", fOptions.UptateGrid)
 	directories.MigrateLegacyDataDir()
 
 	// Graceful shutdown by cancelling background context on interrupt.
@@ -390,29 +393,29 @@ func main() {
 	cmd.HandleFunc(ctx, args)
 
 	// Go routine for getting the maidenhead grid square and updating it as needed.
-	// TODO: Make the auto update user configurable to turn on/off
-	// TODO: Make the auto update interval user configurable
 	go func() {
-		for {
-			conn, err := maidenhead.WatchGPSd(config.GPSd.Addr)
-			if err != nil {
-				log.Fatalf("GPSd daemon: %s", err)
-				time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
-				continue
-			}
-			defer conn.Close()
-			// check the current grid square against the grid square from the gpsd daemon
-			gridSquare, err := maidenhead.CheckGridSquare(conn, config.Locator)
-			if err != nil {
-				log.Fatalf("GPSd daemon: %s", err)
-				time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
-				continue
-			}
-			if gridSquare != config.Locator {
-				config.Locator = gridSquare
-			}
+		if fOptions.UptateGrid {
+			for {
+				conn, err := maidenhead.WatchGPSd(config.GPSd.Addr)
+				if err != nil {
+					log.Fatalf("GPSd daemon: %s", err)
+					time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
+					continue
+				}
+				defer conn.Close()
+				// check the current grid square against the grid square from the gpsd daemon
+				gridSquare, err := maidenhead.CheckGridSquare(conn, config.Locator)
+				if err != nil {
+					log.Fatalf("GPSd daemon: %s", err)
+					time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
+					continue
+				}
+				if gridSquare != config.Locator {
+					config.Locator = gridSquare
+				}
 
-			time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
+				time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
+			}
 		}
 	}()
 
