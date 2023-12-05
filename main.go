@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/la5nta/pat/cfg"
@@ -26,7 +27,6 @@ import (
 	"github.com/la5nta/pat/internal/directories"
 	"github.com/la5nta/pat/internal/forms"
 	"github.com/la5nta/pat/internal/gpsd"
-	"github.com/la5nta/pat/internal/maidenhead"
 
 	"github.com/la5nta/wl2k-go/catalog"
 	"github.com/la5nta/wl2k-go/fbb"
@@ -394,31 +394,35 @@ func main() {
 
 	// Go routine for getting the maidenhead grid square and updating it as needed.
 	go func() {
+		var configMutex sync.Mutex
 		if fOptions.UptateGrid {
+			// Connect to the gpsd daemon
+			conn, err := gpsd.Dial(config.GPSd.Addr)
+			if err != nil {
+				log.Fatalf("GPSd daemon: %s", err)
+			}
+			defer conn.Close()
 			for {
-				conn, err := maidenhead.WatchGPSd(config.GPSd.Addr)
+				// Get grid square
+				gridSquare, err := conn.GetGridSquare()
 				if err != nil {
 					log.Fatalf("GPSd daemon: %s", err)
-					time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
-					continue
-				}
-				defer conn.Close()
-				// check the current grid square against the grid square from the gpsd daemon
-				gridSquare, err := maidenhead.CheckGridSquare(conn, config.Locator)
-				if err != nil {
-					log.Fatalf("GPSd daemon: %s", err)
-					time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
-					continue
 				}
 				if gridSquare != config.Locator {
+					// Lock the config before writing to it
+					configMutex.Lock()
+					config, err = LoadConfig(fOptions.ConfigPath, cfg.DefaultConfig)
 					config.Locator = gridSquare
+					if err := WriteConfig(config, fOptions.ConfigPath); err != nil {
+						log.Fatalf("Unable to write config: %s", err)
+					}
+					// Unlock the config after writing to it
+					configMutex.Unlock()
 				}
-
-				time.Sleep(5 * time.Minute) // wait 5 minutes before trying again
+				time.Sleep(5 * time.Minute)
 			}
 		}
 	}()
-
 }
 
 func configureHandle(ctx context.Context, args []string) {

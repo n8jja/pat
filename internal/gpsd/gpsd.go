@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pd0mz/go-maidenhead"
 	"io"
 	"net"
 	"sync"
@@ -240,4 +241,25 @@ func errUnexpected(err error) error {
 		err = io.ErrUnexpectedEOF
 	}
 	return err
+}
+
+// GetGridSquare provides function for getting updated position and calculating the grid square.
+func (c *Conn) GetGridSquare() (string, error) {
+	for {
+		obj, err := c.NextPos()
+		if err != nil {
+			return "", err
+		}
+
+		var lat = obj.Lat
+		var lon = obj.Lon
+
+		point := maidenhead.NewPoint(lat, lon)
+		newGridSquare, err := point.GridSquare()
+		if err != nil {
+			return "", err
+		}
+
+		return newGridSquare, nil
+	}
 }
