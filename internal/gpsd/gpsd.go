@@ -33,11 +33,12 @@ type Positioner interface {
 
 // Position holds geographic positioning data.
 type Position struct {
-	Lat, Lon float64   // Latitude/longitude in degrees. +/- signifies north/south.
-	Alt      float64   // Altitude in meters.
-	Track    float64   // Course over ground, degrees from true north.
-	Speed    float64   // Speed over ground, meters per second.
-	Time     time.Time // Time as reported by the device.
+	Lat, Lon   float64   // Latitude/longitude in degrees. +/- signifies north/south.
+	Alt        float64   // Altitude in meters.
+	Track      float64   // Course over ground, degrees from true north.
+	Speed      float64   // Speed over ground, meters per second.
+	Time       time.Time // Time as reported by the device.
+	GridSquare string    // GridSquare calculated using Maidenhead Locator System
 }
 
 // Conn represents a socket connection to an GPSd daemon.
